@@ -1,0 +1,163 @@
+---
+title: "Practical Machine Learning (Prediction) - Assignment"
+author: "Nhlakanipho"
+date: "18 December 2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Synopsis
+This paper aims at analyzing the training patterns for 6 diffent users doing Weight Lifting execises. The data set used in this paper was collected by Groupware@LES for their project in Human Activity Recognition which can be found, http://groupware.les.inf.puc-rio.br/har. After exploring, cleaning and applying prediction models on this dataset, the results produced the most likely prediction given specific datapoints.
+
+
+#Data
+Data load from Groupware's project dataset as our source data. There is a Training set and a Testing set which we will use for our final predictions.
+```{r dataload, echo=TRUE, cache=TRUE}
+  if(!file.exists("exerciseTrainingData.csv"))
+  {
+    download.file(
+       "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+       ,destfile="./exerciseTrainingData.csv"
+       ,method="auto"
+    )
+  }
+
+  if(!file.exists("exerciseTestData.csv"))
+  {
+    download.file(
+      "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+      ,destfile="./exerciseTestData.csv"
+      ,method="auto"
+    )
+  }
+  
+  exerciseTrainingData <- read.csv(file = "./exerciseTrainingData.csv", sep = ",", header = TRUE, na.strings = c("NA","#DIV/0!"," "))
+  
+  exerciseTestData <- read.csv(file = "./exerciseTestData.csv", sep = ",", header = TRUE, na.strings = c("NA","#DIV/0!"," "))
+
+```
+
+In preparation of the data, the Trainng had to be further split to a training set and a validation set which we will use to try verify which model/prediction works better for preditions. A 70% split was used on the training data to get these sets.
+```{r splitdata,cache=TRUE,echo=TRUE}
+library(caret)
+set.seed(1654)
+inTrain <- createDataPartition(y=exerciseTrainingData$classe,p=0.70, list = FALSE)
+
+myTrainData <- exerciseTrainingData[inTrain,]
+myTestData <- exerciseTrainingData[-inTrain,]
+
+```
+
+#Data Exploration and Cleaning
+In exploration of the data there was a view on some columns having NA (Index - Diagram 1) and some having a very low variance to be considered as they didn't change much and had a potential of misrepresenting the predictions. Looking at the first 6 values of the data, one can identify all descriptive columns that don't influence or models but just identify the users.
+```{r exploration and clean,cache=TRUE,echo=TRUE}
+head(myTrainData)
+summary(myTrainData)
+
+
+myTrainDataDescriptive <- myTrainData[,-(1:5)]
+myTestDataDescriptive <- myTestData[,-(1:5)]
+
+myTrainDataDescriptive$new_window <- sapply(myTrainDataDescriptive$new_window, function(x){if(x=='no'){x=0}else{x=1}})
+myTestDataDescriptive$new_window <- sapply(myTestDataDescriptive$new_window, function(x){if(x=='no'){x=0}else{x=1}})
+
+
+dim(myTrainDataDescriptive)
+nzvTraining <- nearZeroVar(myTrainDataDescriptive[,-155])
+myTrainDataDescriptive <- myTrainDataDescriptive[,-nzvTraining]
+myTestDataDescriptive <- myTestDataDescriptive[,-nzvTraining]
+
+rowcount <- nrow(myTrainDataDescriptive)
+lenghtDescription <- length(myTrainDataDescriptive)
+naData <- colMeans(is.na(myTrainDataDescriptive))
+
+exData <- c()
+for(i in 1:lenghtDescription) 
+{
+  if(naData[i] >= .7) 
+  {
+    exData <- append(exData, i)
+  }
+}
+
+myTrainDataDescriptive <- myTrainDataDescriptive[,-exData]
+myTestDataDescriptive <- myTestDataDescriptive[,-exData]
+
+rm(rowcount,lenghtDescription,naData,exData)
+
+```
+
+#Predictions
+This section applied model fits and runs predictions on the validation sets to try get the most closely aligned preditions
+
+##Classication Tree
+```{r MLA RPart, cache=TRUE, echo=TRUE}
+library(rpart)
+#install.packages("rpart.plot")
+library(rpart.plot)
+set.seed(4154)
+rpartModelFit <- rpart(classe~., data = myTrainDataDescriptive, method = "class")
+rpartPredict <- predict(rpartModelFit, myTestDataDescriptive, type = "class") 
+rpartConf <- confusionMatrix(rpartPredict, myTestDataDescriptive$classe)
+
+#install.packages("rattle")
+library("rattle")
+library("RGtk2")
+library(RColorBrewer)
+fancyRpartPlot(rpartModelFit)
+
+rpartConf
+  
+```
+##Random Forest
+```{r MLA RandomForest, cache=TRUE, echo=TRUE}
+library("randomForest")
+set.seed(3154) 
+rfMOdelFit <- randomForest(classe~.,data= myTrainDataDescriptive)
+rfPredict <- predict(rfMOdelFit,myTestDataDescriptive)
+
+plot(rfMOdelFit)
+
+rfConf <- confusionMatrix(rfPredict, myTestDataDescriptive$classe)
+rfConf
+```
+##Gradient Boosting Model
+```{r Gradient Boost Model, cache=TRUE, echo=TRUE}
+set.seed(1154)
+gbmModelFit <- train(classe~.,method = 'gbm',data = myTrainDataDescriptive, verbose = FALSE)
+gbmPredict <- predict(gbmModelFit,myTestDataDescriptive) 
+
+plot(gbmModelFit)
+
+gbmConf <- confusionMatrix(gbmPredict, myTestDataDescriptive$classe)
+gbmConf
+```
+
+Random Forest Show the highest accuracy and according to accuracy seen for each Confusion Matrix and further check (Index - Diagram 2) which proves there is a high specificy and high sensitivity overall for the Random Forestcompared to the rest of the data.
+
+
+#Index
+##Diagram1
+```{r Missing Values Test, cache=TRUE, echo=TRUE}
+#install.packages("Amelia")
+
+library("Amelia")
+missmap(myTrainData, main = "Evaluation of Missing Values")
+```
+
+
+##Diagram2
+```{r Prediction Comparison Diagram, cache=TRUE, echo=TRUE}
+par(mfrow=c(2,2))
+plot(rpartConf$byClass, main="classification tree", xlim=c(0.4, 1.005), ylim=c(0.7,1))
+text(rpartConf$byClass[,1], rpartConf$byClass[,2], labels=LETTERS[1:5], cex= 0.7)
+plot(rfConf$byClass, main="random forest", xlim=c(0.96, 1.005))
+text(rfConf$byClass[,1]+0.003, rfConf$byClass[,2], labels=LETTERS[1:5], cex= 0.7)
+plot(gbmConf$byClass, main="boosting", xlim=c(0.93, 1.001))
+text(gbmConf$byClass[,1]+0.005, gbmConf$byClass[,2], labels=LETTERS[1:5], cex= 0.7)
+```
