@@ -1,7 +1,7 @@
 ---
 title: "Practical Machine Learning (Prediction) - Assignment"
 author: "Nhlakanipho"
-date: "18 December 2017"
+date: "21 December 2017"
 output:
   html_document: default
   pdf_document: default
@@ -54,10 +54,10 @@ myTestData <- exerciseTrainingData[-inTrain,]
 ```
 
 #Data Exploration and Cleaning
-In exploration of the data there was a view on some columns having NA (Index - Diagram 1) and some having a very low variance to be considered as they didn't change much and had a potential of misrepresenting the predictions. Looking at the first 6 values of the data, one can identify all descriptive columns that don't influence or models but just identify the users.
+In exploration of the data there was a view on some columns having NA (Index - Diagram1) and some having a very low variance to be considered as they didn't change much and had a potential of misrepresenting the predictions. Looking at the first 6 values of the data, one can identify all descriptive columns that don't influence or models but just identify the users.
 ```{r exploration and clean,cache=TRUE,echo=TRUE}
-head(myTrainData)
-summary(myTrainData)
+#head(myTrainData)
+#summary(myTrainData)
 
 
 myTrainDataDescriptive <- myTrainData[,-(1:5)]
@@ -93,57 +93,83 @@ rm(rowcount,lenghtDescription,naData,exData)
 ```
 
 #Predictions
-This section applied model fits and runs predictions on the validation sets to try get the most closely aligned preditions
+This section applied model fits and runs predictions on the validation sets to try get the most closely aligned preditions.The models of choice used for identifying the model with the best out of sample error accuracy are Classification Trees, Random Forest and Grdient Boosting Model. Thses are investigated below.
 
 ##Classication Tree
-```{r MLA RPart, cache=TRUE, echo=TRUE}
+In the first test, a classification tree in the form of a regression tree is investigated. By default Rpart using a 10 fold cross validation.
+```{r MLA RPart Package Import, cache=TRUE, echo=FALSE}
 library(rpart)
 #install.packages("rpart.plot")
 library(rpart.plot)
-set.seed(4154)
-rpartModelFit <- rpart(classe~., data = myTrainDataDescriptive, method = "class")
-rpartPredict <- predict(rpartModelFit, myTestDataDescriptive, type = "class") 
-rpartConf <- confusionMatrix(rpartPredict, myTestDataDescriptive$classe)
-
 #install.packages("rattle")
 library("rattle")
 library("RGtk2")
 library(RColorBrewer)
-fancyRpartPlot(rpartModelFit)
+```
 
+```{r MLA RPart Package Models, cache=TRUE, echo=TRUE}
+set.seed(4154)
+rpartModelFit <- rpart(classe~., data = myTrainDataDescriptive, method = "class")
+rpartPredict <- predict(rpartModelFit, myTestDataDescriptive, type = "class") 
+rpartConf <- confusionMatrix(rpartPredict, myTestDataDescriptive$classe)
+```
+
+```{r MLA RPart Package Diagrams, cache=TRUE, echo=FALSE}
+fancyRpartPlot(rpartModelFit)
 rpartConf
+printcp(rpartModelFit)
   
 ```
+
+The results and output diagram show the resulting choices of each tree branch with the specific node criterias. The classification tree resulted in a 73% accuracy rate and a out of sample error rate of 17% on the validation dataset. Rpart used at most 13 variable for the tree classification, which is identified as the most relevant classifiers for the model.
+
 ##Random Forest
+Secondly an investiagtion into Random Forest Model is performed to see how it performs in terms of predictions. 3 folds cross validation was used for perfoamance purposes.
+
 ```{r MLA RandomForest, cache=TRUE, echo=TRUE}
 library("randomForest")
 set.seed(3154) 
-rfMOdelFit <- randomForest(classe~.,data= myTrainDataDescriptive)
-rfPredict <- predict(rfMOdelFit,myTestDataDescriptive)
-
+rfMOdelFit <- randomForest(
+                            classe~.
+                            ,data= myTrainDataDescriptive
+                            ,importance = T
+                            ,trControl = trainControl(method = "cv", number = 3)
+                          )
 plot(rfMOdelFit)
+
+rfPredict <- predict(rfMOdelFit,myTestDataDescriptive)
 
 rfConf <- confusionMatrix(rfPredict, myTestDataDescriptive$classe)
 rfConf
 ```
+
+The results and diagram show how increasing the number of trees decreases the error rate for each classe predition. Random Forest predictions resulted in a 99.6% accuracy rate and a out of sample error rate of 0.4% on the validation dataset.The variable importances for the model is shown in (Index - Diagram3).
+
+
 ##Gradient Boosting Model
+Lastly an investiagtion into Gradient Boosting Model is performed to see how it performs in terms of predictions. 3 folds cross validation was used for performance purposes.
 ```{r Gradient Boost Model, cache=TRUE, echo=TRUE}
 set.seed(1154)
-gbmModelFit <- train(classe~.,method = 'gbm',data = myTrainDataDescriptive, verbose = FALSE)
+gbmModelFit <- train(classe~.,method = 'gbm',data = myTrainDataDescriptive, verbose = FALSE,trControl = trainControl(method = "cv", number = 3))
 gbmPredict <- predict(gbmModelFit,myTestDataDescriptive) 
+```
 
+```{r Gradient Boost Model 2, cache=TRUE, echo=FALSE}
 plot(gbmModelFit)
 
 gbmConf <- confusionMatrix(gbmPredict, myTestDataDescriptive$classe)
+
 gbmConf
 ```
+The results and diagram show how increasing the number of trees and increasing the boosting increases overall accuracy in preditions. Gradient Boosting Model predictions resulted in a 98.7% accuracy rate and a out of sample error rate of 1.3% on the validation dataset. By default GBM uses the full dataset for predictions under it's cross validation methods. 
 
+#Conclusion
 Random Forest Show the highest accuracy and according to accuracy seen for each Confusion Matrix and further check (Index - Diagram 2) which proves there is a high specificy and high sensitivity overall for the Random Forestcompared to the rest of the data.
 
 
 #Index
 ##Diagram1
-```{r Missing Values Test, cache=TRUE, echo=TRUE}
+```{r Missing Values Test, cache=TRUE, echo=FALSE}
 #install.packages("Amelia")
 
 library("Amelia")
@@ -152,7 +178,7 @@ missmap(myTrainData, main = "Evaluation of Missing Values")
 
 
 ##Diagram2
-```{r Prediction Comparison Diagram, cache=TRUE, echo=TRUE}
+```{r Prediction Comparison Diagram, cache=TRUE, echo=FALSE}
 par(mfrow=c(2,2))
 plot(rpartConf$byClass, main="classification tree", xlim=c(0.4, 1.005), ylim=c(0.7,1))
 text(rpartConf$byClass[,1], rpartConf$byClass[,2], labels=LETTERS[1:5], cex= 0.7)
@@ -160,4 +186,9 @@ plot(rfConf$byClass, main="random forest", xlim=c(0.96, 1.005))
 text(rfConf$byClass[,1]+0.003, rfConf$byClass[,2], labels=LETTERS[1:5], cex= 0.7)
 plot(gbmConf$byClass, main="boosting", xlim=c(0.93, 1.001))
 text(gbmConf$byClass[,1]+0.005, gbmConf$byClass[,2], labels=LETTERS[1:5], cex= 0.7)
+```
+
+##Diagram3
+```{r RandomForest Variable Importance, cache=TRUE, echo=FALSE}
+varImpPlot(rfMOdelFit,type=2)
 ```
